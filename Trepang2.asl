@@ -1,13 +1,9 @@
-/*
-gameStatus - 4Bytes
-2 in main menu and loading screen
-1 in game
-*/
-
-
 state("CPPFPS-Win64-Shipping")
 {
-    int loadState    : "msmpeg2vdec.dll", 0x264F94; // 0 in game, 2 during cutscene, 1 on load screen
+    // World -> GameInstance -> CurrentLoadingWidget
+    // pointer to the LoadingWidget - if we are in a loading screen, then this is set
+    // so, we just check if it is set
+    long LoadingWidget: 0x4F33BF0, 0x180, 0x288;
     string150 mission: 0x04F302F8, 0x8B0, 0x0;
 }
 
@@ -44,7 +40,7 @@ start
 
 isLoading
 {
-    return current.loadState == 1;
+    return current.LoadingWidget != 0;
 }
 
 split
