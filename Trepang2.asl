@@ -4,6 +4,7 @@ state("CPPFPS-Win64-Shipping")
     // pointer to the LoadingWidget - if we are in a loading screen, then this is set
     // so, we just check if it is set
     long LoadingWidget: 0x4F33BF0, 0x180, 0x288;
+    // GameEngine -> TransitionDescription -> (deref)
     string150 mission: 0x04F302F8, 0x8B0, 0x0;
 }
 
