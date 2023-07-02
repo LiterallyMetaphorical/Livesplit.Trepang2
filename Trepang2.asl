@@ -163,8 +163,9 @@ split
             return vars.CheckSplit(current.mission + "__enter");
         }
      
-        if (current.mission == "Mission_Safehouse_C")
-        {
+        if (current.mission == "Mission_Safehouse_C"
+        || (current.mission == "Mission_FrontEnd_C" && old.mission == "Mission_SyndicateHQFinal_C")
+        ) {
             return vars.CheckSplit(old.mission + "__exit");
         }
     }
