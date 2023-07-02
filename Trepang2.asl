@@ -27,6 +27,8 @@ startup
 
     // these are the fname structs that we do not want to update if their current value is None
     vars.FNamesNoNone = new List<string>() { "missionFName" };
+    // mission names to start timer on when entering from the safehouse
+    vars.Missions = new List<string>() { "Mission_Prologue_C", "Mission_Mothman_C", "Mission_Cultists_C", "Mission_Ghosts_C", "Mission_HorizonHQ_C" };
 }
 
 init
@@ -130,6 +132,14 @@ onStart
 
 start
 {
+    if (settings["start_on_mission"]
+     && old.isLoading
+     && !current.isLoading
+     && vars.Missions.Contains(current.mission)
+    ) {
+        return true;
+    }
+
     return old.cutscene == "None" && current.cutscene == "Prologue_Intro_SequencePrologue_Intro_Master";
 }
 
