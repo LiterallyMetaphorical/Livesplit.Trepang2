@@ -100,6 +100,11 @@ init
             return vars.Helper.Read<IntPtr>(uobject + UOBJECT_CLASS);
         });
 
+        Func<IntPtr, string> getObjectName = (uobject =>
+        {
+            return vars.ReadFName(vars.Helper.Read<long>(uobject + UOBJECT_NAME));
+        });
+
         // we want to, given a UClass, find the offset for `property` on that object
         // TODO: would be nice if we didn't have to traverse this multiple times if we wanted mutliple properties on the same class
         Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
@@ -170,56 +175,80 @@ init
         });
         #endregion
         
+            
         #region reading properties and offsets
-        IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
-        vars.Log("GameEngine at: " + GameEngine.ToString("X"));
-        var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
-        var GameEngine_GameInstance_Offset = getPropertyOffset(GameEngine_GameInstance);
-        vars.Log("GameInstance Offset: " + GameEngine_GameInstance_Offset.ToString("X"));
+        try {
+            IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
+            vars.Log("GameEngine at: " + GameEngine.ToString("X"));
+            var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
+            var GameEngine_GameInstance_Offset = getPropertyOffset(GameEngine_GameInstance);
+            vars.Log("GameInstance Offset: " + GameEngine_GameInstance_Offset.ToString("X"));
 
-        var CPPFPSGameInstance = await waitForPointer(new DeepPointer(
-            vars.GEngine,
-            GameEngine_GameInstance_Offset
-        ));
-        var CPPFPSGameInstance_Class = getObjectClass(CPPFPSGameInstance);
-        
-        var CPPFPSGameInstance_CurrentMissionInfoObject = getProperty(CPPFPSGameInstance_Class, "CurrentMissionInfoObject");
-        var CPPFPSGameInstance_CurrentMissionInfoObject_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentMissionInfoObject);
-        vars.Log("CurrentMissionInfoObject Offset: " + CPPFPSGameInstance_CurrentMissionInfoObject_Offset.ToString("X"));
+            var CPPFPSGameInstance = await waitForPointer(new DeepPointer(
+                vars.GEngine,
+                GameEngine_GameInstance_Offset
+            ));
+            var CPPFPSGameInstance_Class = getObjectClass(CPPFPSGameInstance);
+            
+            var CPPFPSGameInstance_CurrentMissionInfoObject = getProperty(CPPFPSGameInstance_Class, "CurrentMissionInfoObject");
+            var CPPFPSGameInstance_CurrentMissionInfoObject_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentMissionInfoObject);
+            vars.Log("CurrentMissionInfoObject Offset: " + CPPFPSGameInstance_CurrentMissionInfoObject_Offset.ToString("X"));
 
-        var CPPFPSGameInstance_CurrentLoadingWidget = getProperty(CPPFPSGameInstance_Class, "CurrentLoadingWidget");
-        var CPPFPSGameInstance_CurrentLoadingWidget_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentLoadingWidget);
-        vars.Log("CurrentLoadingWidget Offset: " + CPPFPSGameInstance_CurrentLoadingWidget_Offset.ToString("X"));
+            var CPPFPSGameInstance_CurrentLoadingWidget = getProperty(CPPFPSGameInstance_Class, "CurrentLoadingWidget");
+            var CPPFPSGameInstance_CurrentLoadingWidget_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentLoadingWidget);
+            vars.Log("CurrentLoadingWidget Offset: " + CPPFPSGameInstance_CurrentLoadingWidget_Offset.ToString("X"));
 
-        var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
-        var GameInstance_LocalPlayers_Offset = getPropertyOffset(GameInstance_LocalPlayers);
-        vars.Log("LocalPlayers Offset: " + GameInstance_LocalPlayers_Offset.ToString("X"));
+            var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
+            var GameInstance_LocalPlayers_Offset = getPropertyOffset(GameInstance_LocalPlayers);
+            vars.Log("LocalPlayers Offset: " + GameInstance_LocalPlayers_Offset.ToString("X"));
 
-        var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
-        var LocalPlayer_PlayerController_Offset = getPropertyOffset(LocalPlayer_PlayerController);
-        vars.Log("PlayerController Offset: " + LocalPlayer_PlayerController_Offset.ToString("X"));
-        
+            var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
+            var LocalPlayer_PlayerController_Offset = getPropertyOffset(LocalPlayer_PlayerController);
+            vars.Log("PlayerController Offset: " + LocalPlayer_PlayerController_Offset.ToString("X"));
+            
 
-        var playerController = await waitForPointer(new DeepPointer(
-            vars.GEngine,
-            GameEngine_GameInstance_Offset,
-            GameInstance_LocalPlayers_Offset,
-            0x0,
-            LocalPlayer_PlayerController_Offset
-        ));
+            var playerController = await waitForPointer(new DeepPointer(
+                vars.GEngine,
+                GameEngine_GameInstance_Offset,
+                GameInstance_LocalPlayers_Offset,
+                0x0,
+                LocalPlayer_PlayerController_Offset
+            ));
 
-        vars.Log("found PlayerController: " + playerController.ToString("X"));
-        var PlayerControllerBP_C = getObjectClass(playerController);
-        var PlayerControllerBP_C_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
-        vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerControllerBP_C_MyPlayer).ToString("X"));
+            vars.Log("found PlayerController: " + playerController.ToString("X"));
+            var PlayerControllerBP_C = getObjectClass(playerController);
+            var PlayerControllerBP_C_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
+            vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerControllerBP_C_MyPlayer).ToString("X"));
 
-        var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
-        vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
+            var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
+            vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
 
-        var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
-        vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
-        
-        
+            var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
+            vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
+            
+            IntPtr UWorld = getObjectClass(vars.Helper.Read<IntPtr>(vars.GWorld));
+            vars.Log("UWorld at: " + UWorld.ToString("X"));
+            
+            var UWorld_AuthorityGameMode = getProperty(UWorld, "AuthorityGameMode");
+            var UWorld_AuthorityGameMode_Offset = getPropertyOffset(UWorld_AuthorityGameMode);
+            vars.Log("AuthorityGameMode Offset: " + UWorld_AuthorityGameMode_Offset.ToString("X"));
+
+            var GameMode = await waitForPointer(new DeepPointer(
+                vars.GWorld,
+                UWorld_AuthorityGameMode_Offset
+            ));
+
+            var ABaseGameMode_C = getObjectClass(GameMode);
+            vars.Log(getObjectName(ABaseGameMode_C) + " at " + GameMode.ToString("X"));
+
+            var ABaseGameMode_C_CurrentCutscene = getProperty(ABaseGameMode_C, "CurrentCutscene");
+            var ABaseGameMode_C_CurrentCutscene_Offset = getPropertyOffset(ABaseGameMode_C_CurrentCutscene);
+            vars.Log("CurrentCutscene Offset: " + ABaseGameMode_C_CurrentCutscene_Offset.ToString("X"));
+        } catch (Exception e) {
+            vars.Log("error: " + e);
+            throw e;
+        }
+
         #endregion
 
         return;
