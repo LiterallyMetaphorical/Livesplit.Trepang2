@@ -83,6 +83,9 @@ init
         // So we need to do some UE introspection to find the actual offsets in memory (the same way our dumper would)
 
         #region UE internal offsets
+        // We cannot get these dynamically, so they are hardcoded
+        // They will not change unless they were to switch to a significantly different version
+        // of unreal engine, so this is unlikely to break
         var UOBJECT_CLASS = 0x10;
         var UOBJECT_NAME = 0x18;
         var UOBJECT_OUTER = 0x20;
@@ -99,7 +102,6 @@ init
         #endregion
 
         #region helper definitions
-        // get the UClass for a UObject instance
         Func<IntPtr, IntPtr> getObjectClass = (uobject =>
         {
             return vars.Helper.Read<IntPtr>(uobject + UOBJECT_CLASS);
@@ -170,16 +172,16 @@ init
          *
          * waitForPointer takes a deeppointer and polls the value at that pointer until it is not null, and returns it
          */
-        // Thanks apple! This is taken directly, though the rest of this code is heavily inspired
+        // Thanks apple! This is taken directly and modified slightly, though the rest of this code is still heavily inspired from
+        // his borderlands 3 ASL
         // https://github.com/apple1417/Autosplitters/blob/69ad5a5959527a25880fd528e43d3342b1375dda/borderlands3.asl#L572C1-L590C19
         Func<DeepPointer, System.Threading.Tasks.Task<IntPtr>> waitForPointer = (async (deepPtr) =>
         {
-            IntPtr dest;
             while (true) {
-                // Avoid a weird ToC/ToU that no one else seems to run into
                 try {
-                    if (deepPtr.DerefOffsets(game, out dest)) {
-                        return game.ReadPointer(dest);
+                    IntPtr dest = deepPtr.Deref<IntPtr>(game);
+                    if (dest != IntPtr.Zero) {
+                        return dest;
                     }
                 } catch (ArgumentException) { continue; }
 
@@ -191,10 +193,12 @@ init
         });
         #endregion
         
-            
         try {
             #region reading properties and offsets
-            IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
+            var GEngine = await waitForPointer(new DeepPointer(vars.GEngine));
+            vars.Log("GEngine at: " + GEngine.ToString("X"));
+
+            IntPtr GameEngine = getObjectClass(GEngine);
             vars.Log("GameEngine at: " + GameEngine.ToString("X"));
             var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
             var GameEngine_GameInstance_Offset = getPropertyOffset(GameEngine_GameInstance);
@@ -222,7 +226,6 @@ init
             var LocalPlayer_PlayerController_Offset = getPropertyOffset(LocalPlayer_PlayerController);
             vars.Log("PlayerController Offset: " + LocalPlayer_PlayerController_Offset.ToString("X"));
             
-
             var playerController = await waitForPointer(new DeepPointer(
                 vars.GEngine,
                 GameEngine_GameInstance_Offset,
@@ -266,7 +269,6 @@ init
             #endregion
 
             #region creating the memorywatchers
-
             vars.Watchers = new MemoryWatcherList() {
                 // we automatically deref this to their name without FName in update {}
                 // e.g. we can access current.mission directly
@@ -344,6 +346,7 @@ update
 
     IDictionary<string, object> currdict = current;
     
+    // read the values, place them all in current
     vars.Watchers.UpdateAll(game);
     foreach (var watcher in vars.Watchers)
     {
@@ -370,7 +373,8 @@ update
         vars.Log("isLoading: " + old.isLoading + " -> " + current.isLoading);
     }
 
-    // Deref useful FNames here
+    // Deref useful FNames here - any key in current that ends with FName will be read and transformed
+    // into the corresponding string
     foreach (var fname in new List<string>(currdict.Keys))
     {
         if (!fname.EndsWith("FName"))
