@@ -81,6 +81,7 @@ init
 
         #region UE internal offsets
         var UOBJECT_CLASS = 0x10;
+        var UOBJECT_NAME = 0x18;
 
         var UCLASS_PROPERTYLINK = 0x50;
 
@@ -136,6 +137,18 @@ init
             return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
         });
         
+        /**
+         * waitForPointer: unfortunately, sometimes we'll only know that a property holds a certain class,
+         *   but the subproperty we want to look for only exists on a certain subclass of that class.
+         * 
+         * for example, we know that GEngine.GameInstance will always actually be a CPPFPSGameInstance,
+         *   but the property for GameInstance will only claim that it is an instance of GameInstance (the class)
+         *
+         * in these cases, we want to wait until the actual uobject exists, and then we can read it's class
+         *   from there (we can't just get it all from inspecting GEngine)
+         *
+         * waitForPointer takes a deeppointer and polls the value at that pointer until it is not null, and returns it
+         */
         // Thanks apple! This is taken directly, though the rest of this code is heavily inspired
         // https://github.com/apple1417/Autosplitters/blob/69ad5a5959527a25880fd528e43d3342b1375dda/borderlands3.asl#L572C1-L590C19
         Func<DeepPointer, System.Threading.Tasks.Task<IntPtr>> waitForPointer = (async (deepPtr) =>
@@ -164,6 +177,20 @@ init
         var GameEngine_GameInstance_Offset = getPropertyOffset(GameEngine_GameInstance);
         vars.Log("GameInstance Offset: " + GameEngine_GameInstance_Offset.ToString("X"));
 
+        var CPPFPSGameInstance = await waitForPointer(new DeepPointer(
+            vars.GEngine,
+            GameEngine_GameInstance_Offset
+        ));
+        var CPPFPSGameInstance_Class = getObjectClass(CPPFPSGameInstance);
+        
+        var CPPFPSGameInstance_CurrentMissionInfoObject = getProperty(CPPFPSGameInstance_Class, "CurrentMissionInfoObject");
+        var CPPFPSGameInstance_CurrentMissionInfoObject_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentMissionInfoObject);
+        vars.Log("CurrentMissionInfoObject Offset: " + CPPFPSGameInstance_CurrentMissionInfoObject_Offset.ToString("X"));
+
+        var CPPFPSGameInstance_CurrentLoadingWidget = getProperty(CPPFPSGameInstance_Class, "CurrentLoadingWidget");
+        var CPPFPSGameInstance_CurrentLoadingWidget_Offset = getPropertyOffset(CPPFPSGameInstance_CurrentLoadingWidget);
+        vars.Log("CurrentLoadingWidget Offset: " + CPPFPSGameInstance_CurrentLoadingWidget_Offset.ToString("X"));
+
         var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
         var GameInstance_LocalPlayers_Offset = getPropertyOffset(GameInstance_LocalPlayers);
         vars.Log("LocalPlayers Offset: " + GameInstance_LocalPlayers_Offset.ToString("X"));
@@ -172,10 +199,7 @@ init
         var LocalPlayer_PlayerController_Offset = getPropertyOffset(LocalPlayer_PlayerController);
         vars.Log("PlayerController Offset: " + LocalPlayer_PlayerController_Offset.ToString("X"));
         
-        // the PlayerController here will always actually be a PlayerControllerBP_C, but the UProperty here only knows
-        // it's at least a PlayerController
-        // so we unfortunately have to wait until an instance is put here, and then we can get the class off that and continue
-        // reading
+
         var playerController = await waitForPointer(new DeepPointer(
             vars.GEngine,
             GameEngine_GameInstance_Offset,
