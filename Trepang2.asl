@@ -34,118 +34,159 @@ init
     });
 
     #region UE introspection and property setup
-    vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
-    vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
-    vars.GEngine = vars.Helper.ScanRel(7, "A8 01 75 ?? 48 C7 05") + 0x4;
-    vars.Log("Found GEngine at 0x" + vars.GEngine.ToString("X"));
-    var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
-    vars.Log("Found FNamePool at 0x" + FNamePool.ToString("X"));
+    // allow us to cancel operations if the game closes or livesplit shutdowns
+    vars.cts = new CancellationTokenSource();
+    System.Threading.Tasks.Task.Run((Func<System.Threading.Tasks.Task<object>>)(async () => {
+        vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
+        vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
+        vars.GEngine = vars.Helper.ScanRel(7, "A8 01 75 ?? 48 C7 05") + 0x4;
+        vars.Log("Found GEngine at 0x" + vars.GEngine.ToString("X"));
+        var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
+        vars.Log("Found FNamePool at 0x" + FNamePool.ToString("X"));
 
-    // The following code derefences FName structs to their string counterparts by
-    // indexing the FNamePool table
+        // The following code derefences FName structs to their string counterparts by
+        // indexing the FNamePool table
 
-    // `fname` is the actual struct, not a pointer to the struct
-    vars.CachedFNames = new Dictionary<long, string>();
-    vars.ReadFName = (Func<long, string>)(fname => 
-    {
-        if (vars.CachedFNames.ContainsKey(fname)) return vars.CachedFNames[fname];
-
-        int name_offset  = (int) fname & 0xFFFF;
-        int chunk_offset = (int) (fname >> 0x10) & 0xFFFF;
-
-        var base_ptr = new DeepPointer((IntPtr) FNamePool + chunk_offset * 0x8 + 0x10, name_offset * 0x2);
-        byte[] name_metadata = base_ptr.DerefBytes(game, 2);
-
-        // First 10 bits are the size, but we read the bytes out of order
-        // e.g. 3C05 in memory is 0011 1100 0000 0101, but really the bytes we want are the last 8 and the first two, in that order.
-        int size = name_metadata[1] << 2 | (name_metadata[0] & 0xC0) >> 6;
-
-        // read the next (size) bytes after the name_metadata
-        IntPtr name_addr;
-        base_ptr.DerefOffsets(game, out name_addr);
-        // 2 bytes here for the name_metadata
-        string name = game.ReadString(name_addr + 0x2, size);
-
-        vars.CachedFNames[fname] = name;
-        return name;
-    });
-
-    // Unfortunately, Trepang2 has multiple versions that are simultaneously actively used for runs
-    // Between these versions, the offsets for various properties change
-    // So even if we have a signature for GWorld and NamePoolData, the offsets will change, breaking this
-    // between versions.
-    // So we need to do some UE introspection to find the actual offsets in memory (the same way our dumper would)
-
-    #region UE internal offsets
-    var UOBJECT_CLASS = 0x10;
-
-    var UCLASS_PROPERTYLINK = 0x50;
-
-    var UPROPERTY_NAME = 0x28;
-    var UPROPERTY_OFFSET = 0x4C;
-    var UPROPERTY_PROPERTYLINKNEXT = 0x58;
-
-    var UARRAYPROPERTY_INNER = 0x78;
-    var UOBJECTPROPERTY_CLASS = 0x78;
-    #endregion
-
-    // get the UClass for a UObject instance
-    Func<IntPtr, IntPtr> getObjectClass = (uobject =>
-    {
-        return vars.Helper.Read<IntPtr>(uobject + UOBJECT_CLASS);
-    });
-
-    // we want to, given a UClass, find the offset for `property` on that object
-    Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
-    {
-        IntPtr uproperty = vars.Helper.Read<IntPtr>(uclass + UCLASS_PROPERTYLINK);
-
-        while(uproperty != IntPtr.Zero)
+        // `fname` is the actual struct, not a pointer to the struct
+        vars.CachedFNames = new Dictionary<long, string>();
+        vars.ReadFName = (Func<long, string>)(fname => 
         {
-            var propName = vars.ReadFName(vars.Helper.Read<long>(uproperty + UPROPERTY_NAME));
-            vars.Log("  at " + propName);
+            if (vars.CachedFNames.ContainsKey(fname)) return vars.CachedFNames[fname];
 
-            if (propName == propertyName)
+            int name_offset  = (int) fname & 0xFFFF;
+            int chunk_offset = (int) (fname >> 0x10) & 0xFFFF;
+
+            var base_ptr = new DeepPointer((IntPtr) FNamePool + chunk_offset * 0x8 + 0x10, name_offset * 0x2);
+            byte[] name_metadata = base_ptr.DerefBytes(game, 2);
+
+            // First 10 bits are the size, but we read the bytes out of order
+            // e.g. 3C05 in memory is 0011 1100 0000 0101, but really the bytes we want are the last 8 and the first two, in that order.
+            int size = name_metadata[1] << 2 | (name_metadata[0] & 0xC0) >> 6;
+
+            // read the next (size) bytes after the name_metadata
+            IntPtr name_addr;
+            base_ptr.DerefOffsets(game, out name_addr);
+            // 2 bytes here for the name_metadata
+            string name = game.ReadString(name_addr + 0x2, size);
+
+            vars.CachedFNames[fname] = name;
+            return name;
+        });
+
+        // Unfortunately, Trepang2 has multiple versions that are simultaneously actively used for runs
+        // Between these versions, the offsets for various properties change
+        // So even if we have a signature for GWorld and NamePoolData, the offsets will change, breaking this
+        // between versions.
+        // So we need to do some UE introspection to find the actual offsets in memory (the same way our dumper would)
+
+        #region UE internal offsets
+        var UOBJECT_CLASS = 0x10;
+
+        var UCLASS_PROPERTYLINK = 0x50;
+
+        var UPROPERTY_NAME = 0x28;
+        var UPROPERTY_OFFSET = 0x4C;
+        var UPROPERTY_PROPERTYLINKNEXT = 0x58;
+
+        var UARRAYPROPERTY_INNER = 0x78;
+        var UOBJECTPROPERTY_CLASS = 0x78;
+        #endregion
+
+        // get the UClass for a UObject instance
+        Func<IntPtr, IntPtr> getObjectClass = (uobject =>
+        {
+            return vars.Helper.Read<IntPtr>(uobject + UOBJECT_CLASS);
+        });
+
+        // we want to, given a UClass, find the offset for `property` on that object
+        Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
+        {
+            IntPtr uproperty = vars.Helper.Read<IntPtr>(uclass + UCLASS_PROPERTYLINK);
+
+            while(uproperty != IntPtr.Zero)
             {
-                return uproperty;
+                var propName = vars.ReadFName(vars.Helper.Read<long>(uproperty + UPROPERTY_NAME));
+                vars.Log("  at " + propName);
+
+                if (propName == propertyName)
+                {
+                    return uproperty;
+                }
+
+                uproperty = vars.Helper.Read<IntPtr>(uproperty + UPROPERTY_PROPERTYLINKNEXT);
             }
 
-            uproperty = vars.Helper.Read<IntPtr>(uproperty + UPROPERTY_PROPERTYLINKNEXT);
-        }
+            throw new Exception("Couldn't find property " + propertyName + " in class 0x" + uclass.ToString("X"));
+        });
 
-        throw new Exception("Couldn't find property " + propertyName + " in class 0x" + uclass.ToString("X"));
-    });
+        Func<IntPtr, IntPtr> getObjectPropertyClass = (uproperty =>
+        {
+            return vars.Helper.Read<IntPtr>(uproperty + UOBJECTPROPERTY_CLASS);
+        });
 
-    Func<IntPtr, IntPtr> getObjectPropertyClass = (uproperty =>
-    {
-        return vars.Helper.Read<IntPtr>(uproperty + UOBJECTPROPERTY_CLASS);
-    });
+        Func<IntPtr, IntPtr> getArrayPropertyInner = (uproperty =>
+        {
+            return getObjectPropertyClass(vars.Helper.Read<IntPtr>(uproperty + UARRAYPROPERTY_INNER));
+        });
 
-    Func<IntPtr, IntPtr> getArrayPropertyInner = (uproperty =>
-    {
-        return getObjectPropertyClass(vars.Helper.Read<IntPtr>(uproperty + UARRAYPROPERTY_INNER));
-    });
+        Func<IntPtr, int> getPropertyOffset = (uproperty =>
+        {
+            return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
+        });
+        
+        // Thanks apple!
+        // https://github.com/apple1417/Autosplitters/blob/69ad5a5959527a25880fd528e43d3342b1375dda/borderlands3.asl#L572C1-L590C19
+        Func<DeepPointer, System.Threading.Tasks.Task<IntPtr>> waitForPointer = (async (deepPtr) =>
+        {
+            IntPtr dest;
+            while (true) {
+                // Avoid a weird ToC/ToU that no one else seems to run into
+                try {
+                    if (deepPtr.DerefOffsets(game, out dest)) {
+                        return game.ReadPointer(dest);
+                    }
+                } catch (ArgumentException) { continue; }
 
-    Func<IntPtr, int> getPropertyOffset = (uproperty =>
-    {
-        return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
-    });
-    
-    IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
-    vars.Log("GameEngine at: " + GameEngine.ToString("X"));
-    var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
-    vars.Log("GameInstance Offset: " + getPropertyOffset(GameEngine_GameInstance).ToString("X"));
+                await System.Threading.Tasks.Task.Delay(
+                    500, vars.cts.Token
+                ).ConfigureAwait(true);
+                vars.cts.Token.ThrowIfCancellationRequested();
+            }
+        });
+        
+        IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
+        vars.Log("GameEngine at: " + GameEngine.ToString("X"));
+        var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
+        var GameEngine_GameInstance_Offset = getPropertyOffset(GameEngine_GameInstance);
+        vars.Log("GameInstance Offset: " + GameEngine_GameInstance_Offset.ToString("X"));
 
-    var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
-    vars.Log("LocalPlayers [" + GameInstance_LocalPlayers.ToString("X") + "] Offset: " + getPropertyOffset(GameInstance_LocalPlayers).ToString("X"));
+        var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
+        var GameInstance_LocalPlayers_Offset = getPropertyOffset(GameInstance_LocalPlayers);
+        vars.Log("LocalPlayers Offset: " + GameInstance_LocalPlayers_Offset.ToString("X"));
 
-    var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
-    vars.Log("PlayerController Offset: " + getPropertyOffset(LocalPlayer_PlayerController).ToString("X"));
-    
-    
-    // var PlayerController_MyPlayer = getProperty(getObjectPropertyClass(LocalPlayer_PlayerController), "MyPlayer");
-    // vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
+        var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
+        var LocalPlayer_PlayerController_Offset = getPropertyOffset(LocalPlayer_PlayerController);
+        vars.Log("PlayerController Offset: " + LocalPlayer_PlayerController_Offset.ToString("X"));
+        
+        // the PlayerController here will always actually be a PlayerControllerBP_C, but the UProperty here only knows
+        // it's at least a PlayerController
+        // so we unfortunately have to wait until an instance is put here, and then we can get the class off that and continue
+        // reading
+        var playerController = await waitForPointer(new DeepPointer(
+            vars.GEngine,
+            GameEngine_GameInstance_Offset,
+            GameInstance_LocalPlayers_Offset,
+            0x0,
+            LocalPlayer_PlayerController_Offset
+        ));
 
+        vars.Log("found PlayerController: " + playerController.ToString("X"));
+        var PlayerControllerBP_C = getObjectClass(playerController);
+        var PlayerController_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
+        vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
+
+        return;
+    }), vars.cts.Token);
     #endregion
 }
 
@@ -294,5 +335,11 @@ split
 
 exit
 {
+    vars.cts.Cancel();
     timer.IsGameTimePaused = true;
+}
+
+shutdown
+{
+    vars.cts.Cancel();
 }
