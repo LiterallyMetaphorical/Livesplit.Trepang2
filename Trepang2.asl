@@ -82,7 +82,9 @@ init
         #region UE internal offsets
         var UOBJECT_CLASS = 0x10;
         var UOBJECT_NAME = 0x18;
+        var UOBJECT_OUTER = 0x20;
 
+        var UCLASS_SUPERSTRUCT = 0x40;
         var UCLASS_PROPERTYLINK = 0x50;
 
         var UPROPERTY_NAME = 0x28;
@@ -105,11 +107,22 @@ init
             return vars.ReadFName(vars.Helper.Read<long>(uobject + UOBJECT_NAME));
         });
 
+        Func<IntPtr, IntPtr> getClassSuper = (uobject =>
+        {
+            return vars.Helper.Read<IntPtr>(uobject + UCLASS_SUPERSTRUCT);
+        });
+
         // we want to, given a UClass, find the offset for `property` on that object
         // TODO: would be nice if we didn't have to traverse this multiple times if we wanted mutliple properties on the same class
-        Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
+        Func<IntPtr, string, IntPtr> getProperty = null;
+        getProperty = ((uclass, propertyName) =>
         {
             IntPtr uproperty = vars.Helper.Read<IntPtr>(uclass + UCLASS_PROPERTYLINK);
+            // Hack because I guess the propertylink can be null, but the superstruct will have it
+            if (uproperty == IntPtr.Zero)
+            {
+                return getProperty(getClassSuper(uclass), propertyName);
+            }
 
             while(uproperty != IntPtr.Zero)
             {
@@ -246,7 +259,7 @@ init
             vars.Log("CurrentCutscene Offset: " + ABaseGameMode_C_CurrentCutscene_Offset.ToString("X"));
         } catch (Exception e) {
             vars.Log("error: " + e);
-            throw e;
+            throw;
         }
 
         #endregion
