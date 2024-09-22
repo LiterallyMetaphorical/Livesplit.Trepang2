@@ -36,6 +36,8 @@ init
     #region UE introspection and property setup
     vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
     vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
+    vars.GEngine = vars.Helper.ScanRel(7, "A8 01 75 ?? 48 C7 05") + 0x4;
+    vars.Log("Found GEngine at 0x" + vars.GEngine.ToString("X"));
     var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
     vars.Log("Found FNamePool at 0x" + FNamePool.ToString("X"));
 
@@ -129,16 +131,17 @@ init
         return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
     });
     
-    IntPtr UWorld = getObjectClass(vars.Helper.Read<IntPtr>(vars.GWorld));
-    vars.Log("UWorld at: " + UWorld);
-    var UWorld_OwningGameInstance = getProperty(UWorld, "OwningGameInstance");
-    vars.Log("GameInstance Offset: " + getPropertyOffset(UWorld_OwningGameInstance).ToString("X"));
+    IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
+    vars.Log("GameEngine at: " + GameEngine.ToString("X"));
+    var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
+    vars.Log("GameInstance Offset: " + getPropertyOffset(GameEngine_GameInstance).ToString("X"));
 
-    var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(UWorld_OwningGameInstance), "LocalPlayers");
+    var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(GameEngine_GameInstance), "LocalPlayers");
     vars.Log("LocalPlayers [" + GameInstance_LocalPlayers.ToString("X") + "] Offset: " + getPropertyOffset(GameInstance_LocalPlayers).ToString("X"));
 
     var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
     vars.Log("PlayerController Offset: " + getPropertyOffset(LocalPlayer_PlayerController).ToString("X"));
+    
     
     // var PlayerController_MyPlayer = getProperty(getObjectPropertyClass(LocalPlayer_PlayerController), "MyPlayer");
     // vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
