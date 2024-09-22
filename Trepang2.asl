@@ -187,13 +187,15 @@ init
         vars.Log("found PlayerController: " + playerController.ToString("X"));
         var PlayerControllerBP_C = getObjectClass(playerController);
         var PlayerControllerBP_C_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
-        vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
+        vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerControllerBP_C_MyPlayer).ToString("X"));
 
         var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
         vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
 
         var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
         vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
+        
+        
         #endregion
 
         return;
