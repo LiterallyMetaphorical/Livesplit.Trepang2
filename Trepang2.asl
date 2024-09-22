@@ -101,6 +101,7 @@ init
         while(uproperty != IntPtr.Zero)
         {
             var propName = vars.ReadFName(vars.Helper.Read<long>(uproperty + UPROPERTY_NAME));
+            vars.Log("  at " + propName);
 
             if (propName == propertyName)
             {
@@ -113,14 +114,14 @@ init
         throw new Exception("Couldn't find property " + propertyName + " in class 0x" + uclass.ToString("X"));
     });
 
-    Func<IntPtr, int> getObjectPropertyClass = (uproperty =>
+    Func<IntPtr, IntPtr> getObjectPropertyClass = (uproperty =>
     {
         return vars.Helper.Read<IntPtr>(uproperty + UOBJECTPROPERTY_CLASS);
     });
 
-    Func<IntPtr, int> getArrayPropertyInner = (uproperty =>
+    Func<IntPtr, IntPtr> getArrayPropertyInner = (uproperty =>
     {
-        return vars.Helper.Read<IntPtr>(uproperty + UARRAYPROPERTY_INNER);
+        return getObjectPropertyClass(vars.Helper.Read<IntPtr>(uproperty + UARRAYPROPERTY_INNER));
     });
 
     Func<IntPtr, int> getPropertyOffset = (uproperty =>
@@ -131,7 +132,16 @@ init
     IntPtr UWorld = getObjectClass(vars.Helper.Read<IntPtr>(vars.GWorld));
     vars.Log("UWorld at: " + UWorld);
     var UWorld_OwningGameInstance = getProperty(UWorld, "OwningGameInstance");
-    vars.Log("GameInstanceOffset: " + getPropertyOffset(UWorld_OwningGameInstance).ToString("X"));
+    vars.Log("GameInstance Offset: " + getPropertyOffset(UWorld_OwningGameInstance).ToString("X"));
+
+    var GameInstance_LocalPlayers = getProperty(getObjectPropertyClass(UWorld_OwningGameInstance), "LocalPlayers");
+    vars.Log("LocalPlayers [" + GameInstance_LocalPlayers.ToString("X") + "] Offset: " + getPropertyOffset(GameInstance_LocalPlayers).ToString("X"));
+
+    var LocalPlayer_PlayerController = getProperty(getArrayPropertyInner(GameInstance_LocalPlayers), "PlayerController");
+    vars.Log("PlayerController Offset: " + getPropertyOffset(LocalPlayer_PlayerController).ToString("X"));
+    
+    // var PlayerController_MyPlayer = getProperty(getObjectPropertyClass(LocalPlayer_PlayerController), "MyPlayer");
+    // vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
 
     #endregion
 }
