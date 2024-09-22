@@ -15,6 +15,25 @@ startup
 
 init
 {
+    // basic ASL setup
+    vars.CompletedSplits = new Dictionary<string, bool>();
+    // this function is a helper for checking splits that may or may not exist in settings,
+    // and if we want to do them only once
+    vars.CheckSplit = (Func<string, bool>)(key => {
+        // if the split doesn't exist, or it's off, or we've done it already
+        if (!settings.ContainsKey(key)
+          || !settings[key]
+          || vars.CompletedSplits.ContainsKey(key) && vars.CompletedSplits[key]
+        ) {
+            return false;
+        }
+
+        vars.CompletedSplits[key] = true;
+        vars.Log("Completed: " + key);
+        return true;
+    });
+
+    #region UE introspection and property setup
     vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
     vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
     var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
@@ -49,22 +68,28 @@ init
         return name;
     });
 
-    vars.CompletedSplits = new Dictionary<string, bool>();
-    // this function is a helper for checking splits that may or may not exist in settings,
-    // and if we want to do them only once
-    vars.CheckSplit = (Func<string, bool>)(key => {
-        // if the split doesn't exist, or it's off, or we've done it already
-        if (!settings.ContainsKey(key)
-          || !settings[key]
-          || vars.CompletedSplits.ContainsKey(key) && vars.CompletedSplits[key]
-        ) {
-            return false;
-        }
+    // Unfortunately, Trepang2 has multiple versions that are simultaneously actively used for runs
+    // Between these versions, the offsets for various properties change
+    // So even if we have a signature for GWorld and NamePoolData, the offsets will change, breaking this
+    // between versions.
+    // So we need to do some UE introspection to find the actual offsets in memory (the same way our dumper would)
 
-        vars.CompletedSplits[key] = true;
-        vars.Log("Completed: " + key);
-        return true;
+    #region UE internal offsets
+    var UOBJECT_CLASS = 0x10;
+    #endregion
+
+    // get the UClass for a UObject instance
+    Func<IntPtr, IntPtr> getObjectClass = (uobject =>
+    {
+        return vars.Helper.Read<IntPtr>(uobject, UOBJECT_CLASS);
     });
+
+    // we want to, given a UClass, find the offset for `property` on that object
+
+    vars.Log(getObjectClass(vars.GWorld).ToString("X"));
+
+
+    #endregion
 }
 
 update
