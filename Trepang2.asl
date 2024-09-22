@@ -76,18 +76,62 @@ init
 
     #region UE internal offsets
     var UOBJECT_CLASS = 0x10;
+
+    var UCLASS_PROPERTYLINK = 0x50;
+
+    var UPROPERTY_NAME = 0x28;
+    var UPROPERTY_OFFSET = 0x4C;
+    var UPROPERTY_PROPERTYLINKNEXT = 0x58;
+
+    var UARRAYPROPERTY_INNER = 0x78;
+    var UOBJECTPROPERTY_CLASS = 0x78;
     #endregion
 
     // get the UClass for a UObject instance
     Func<IntPtr, IntPtr> getObjectClass = (uobject =>
     {
-        return vars.Helper.Read<IntPtr>(uobject, UOBJECT_CLASS);
+        return vars.Helper.Read<IntPtr>(uobject + UOBJECT_CLASS);
     });
 
     // we want to, given a UClass, find the offset for `property` on that object
+    Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
+    {
+        IntPtr uproperty = vars.Helper.Read<IntPtr>(uclass + UCLASS_PROPERTYLINK);
 
-    vars.Log(getObjectClass(vars.GWorld).ToString("X"));
+        while(uproperty != IntPtr.Zero)
+        {
+            var propName = vars.ReadFName(vars.Helper.Read<long>(uproperty + UPROPERTY_NAME));
 
+            if (propName == propertyName)
+            {
+                return uproperty;
+            }
+
+            uproperty = vars.Helper.Read<IntPtr>(uproperty + UPROPERTY_PROPERTYLINKNEXT);
+        }
+
+        throw new Exception("Couldn't find property " + propertyName + " in class 0x" + uclass.ToString("X"));
+    });
+
+    Func<IntPtr, int> getObjectPropertyClass = (uproperty =>
+    {
+        return vars.Helper.Read<IntPtr>(uproperty + UOBJECTPROPERTY_CLASS);
+    });
+
+    Func<IntPtr, int> getArrayPropertyInner = (uproperty =>
+    {
+        return vars.Helper.Read<IntPtr>(uproperty + UARRAYPROPERTY_INNER);
+    });
+
+    Func<IntPtr, int> getPropertyOffset = (uproperty =>
+    {
+        return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
+    });
+    
+    IntPtr UWorld = getObjectClass(vars.Helper.Read<IntPtr>(vars.GWorld));
+    vars.Log("UWorld at: " + UWorld);
+    var UWorld_OwningGameInstance = getProperty(UWorld, "OwningGameInstance");
+    vars.Log("GameInstanceOffset: " + getPropertyOffset(UWorld_OwningGameInstance).ToString("X"));
 
     #endregion
 }
