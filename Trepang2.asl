@@ -135,7 +135,6 @@ init
         {
             return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
         });
-        #endregion
         
         // Thanks apple! This is taken directly, though the rest of this code is heavily inspired
         // https://github.com/apple1417/Autosplitters/blob/69ad5a5959527a25880fd528e43d3342b1375dda/borderlands3.asl#L572C1-L590C19
@@ -156,7 +155,9 @@ init
                 vars.cts.Token.ThrowIfCancellationRequested();
             }
         });
+        #endregion
         
+        #region reading properties and offsets
         IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
         vars.Log("GameEngine at: " + GameEngine.ToString("X"));
         var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
@@ -193,6 +194,7 @@ init
 
         var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
         vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
+        #endregion
 
         return;
     }), vars.cts.Token);
