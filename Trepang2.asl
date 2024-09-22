@@ -16,6 +16,7 @@ startup
 init
 {
     vars.finishedLoading = false;
+    vars.Watchers = null;
 
     // basic ASL setup
     vars.CompletedSplits = new Dictionary<string, bool>();
@@ -233,7 +234,8 @@ init
             vars.Log("found PlayerController: " + playerController.ToString("X"));
             var PlayerControllerBP_C = getObjectClass(playerController);
             var PlayerControllerBP_C_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
-            vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerControllerBP_C_MyPlayer).ToString("X"));
+            var PlayerControllerBP_C_MyPlayer_Offset = getPropertyOffset(PlayerControllerBP_C_MyPlayer);
+            vars.Log("MyPlayer Offset: " + PlayerControllerBP_C_MyPlayer_Offset.ToString("X"));
 
             var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
             var PlayerBP_C_bIsWearingGasMask_Offset = getPropertyOffset(PlayerBP_C_bIsWearingGasMask);
@@ -264,14 +266,62 @@ init
             #endregion
 
             #region creating the memorywatchers
-            vars.MissionFNameWatcher = new MemoryWatcher<long>(
-                new DeepPointer(
-                    vars.GEngine,
-                    GameEngine_GameInstance_Offset,
-                    CPPFPSGameInstance_CurrentMissionInfoObject_Offset,
-                    UOBJECT_NAME
-                )
-            );
+
+            vars.Watchers = new MemoryWatcherList() {
+                // we automatically deref this to their name without FName in update {}
+                // e.g. we can access current.mission directly
+                new MemoryWatcher<long>(
+                   new DeepPointer(
+                        vars.GWorld,
+                        UWorld_AuthorityGameMode_Offset,
+                        ABaseGameMode_C_CurrentCutscene_Offset,
+                        UOBJECT_OUTER,
+                        UOBJECT_NAME
+                    )
+                ) { Name = "cutsceneFName" },
+                new MemoryWatcher<long>(
+                   new DeepPointer(
+                        vars.GEngine,
+                        GameEngine_GameInstance_Offset,
+                        CPPFPSGameInstance_CurrentMissionInfoObject_Offset,
+                        UOBJECT_NAME
+                    )
+                ) { Name = "missionFName" },
+
+                // Other fun things
+                new MemoryWatcher<bool>(
+                   new DeepPointer(
+                        vars.GEngine,
+                        GameEngine_GameInstance_Offset,
+                        GameInstance_LocalPlayers_Offset,
+                        0x0,
+                        LocalPlayer_PlayerController_Offset,
+                        PlayerControllerBP_C_MyPlayer_Offset,
+                        PlayerBP_C_bIsWearingGasMask_Offset
+                    )
+                ) { Name = "IsWearingGasMask" },
+                new MemoryWatcher<bool>(
+                   new DeepPointer(
+                        vars.GEngine,
+                        GameEngine_GameInstance_Offset,
+                        GameInstance_LocalPlayers_Offset,
+                        0x0,
+                        LocalPlayer_PlayerController_Offset,
+                        PlayerControllerBP_C_MyPlayer_Offset,
+                        PlayerBP_C_IsUnlockingRestraints_Offset
+                    )
+                ) { Name = "IsUnlockingRestraints" },
+
+                // pointer to the LoadingWidget - if we are in a loading screen, then this is set
+                // so, we just check if it is set
+                new MemoryWatcher<IntPtr>(
+                   new DeepPointer(
+                        vars.GEngine,
+                        GameEngine_GameInstance_Offset,
+                        CPPFPSGameInstance_CurrentLoadingWidget_Offset
+                    )
+                ) { Name = "LoadingWidget" },
+            };
             #endregion
         } catch (Exception e) {
             vars.Log("error: " + e);
@@ -292,27 +342,16 @@ update
         return;
     }
 
-    // we automatically deref this to their name without FName in update {}
-    // e.g. we can access current.mission directly
-    // World -> AuthorityGameMode -> CurrentCutscene -> Outer -> Name
-    current.cutsceneFName = vars.Helper.Read<long>(vars.GWorld, 0x118, 0x628, 0x20, 0x18);
-    // World -> GameInstance -> CurrentMissionInfoObject -> Name
-    vars.MissionFNameWatcher.Update(game);
-    current.missionFName = vars.MissionFNameWatcher.Current;
+    IDictionary<string, object> currdict = current;
     
-    // Other fun things
-    // World -> GameInstance -> LocalPlayers.Data -> LocalPlayers[0] -> PlayerController -> MyPlayer -> bIsWearingGasMask
-    current.IsWearingGasMask = vars.Helper.Read<bool>(vars.GWorld, 0x180, 0x38, 0x0, 0x30, 0x598, 0x1178);
-    // World -> GameInstance -> LocalPlayers.Data -> LocalPlayers[0] -> PlayerController -> MyPlayer -> IsUnlockingRestraints
-    current.IsUnlockingRestraints = vars.Helper.Read<bool>(vars.GWorld, 0x180, 0x38, 0x0, 0x30, 0x598, 0x2828);
-
-    // World -> GameInstance -> CurrentLoadingWidget
-    // pointer to the LoadingWidget - if we are in a loading screen, then this is set
-    // so, we just check if it is set
-    current.LoadingWidget = vars.Helper.Read<long>(vars.GWorld, 0x180, 0x290);
+    vars.Watchers.UpdateAll(game);
+    foreach (var watcher in vars.Watchers)
+    {
+        currdict[watcher.Name] = watcher.Current;
+    }
 
     // This is useful for more than just the isLoading {} block
-    current.isLoading = current.LoadingWidget != 0 || current.missionFName == 0;
+    current.isLoading = current.LoadingWidget != IntPtr.Zero || current.missionFName == 0;
 
     if (!((IDictionary<string, object>)(old)).ContainsKey("cutsceneFName"))
     {
@@ -332,7 +371,6 @@ update
     }
 
     // Deref useful FNames here
-    IDictionary<string, object> currdict = current;
     foreach (var fname in new List<string>(currdict.Keys))
     {
         if (!fname.EndsWith("FName"))
