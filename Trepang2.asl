@@ -92,6 +92,7 @@ init
         var UOBJECTPROPERTY_CLASS = 0x78;
         #endregion
 
+        #region helper definitions
         // get the UClass for a UObject instance
         Func<IntPtr, IntPtr> getObjectClass = (uobject =>
         {
@@ -99,6 +100,7 @@ init
         });
 
         // we want to, given a UClass, find the offset for `property` on that object
+        // TODO: would be nice if we didn't have to traverse this multiple times if we wanted mutliple properties on the same class
         Func<IntPtr, string, IntPtr> getProperty = ((uclass, propertyName) =>
         {
             IntPtr uproperty = vars.Helper.Read<IntPtr>(uclass + UCLASS_PROPERTYLINK);
@@ -133,8 +135,9 @@ init
         {
             return vars.Helper.Read<int>(uproperty + UPROPERTY_OFFSET);
         });
+        #endregion
         
-        // Thanks apple!
+        // Thanks apple! This is taken directly, though the rest of this code is heavily inspired
         // https://github.com/apple1417/Autosplitters/blob/69ad5a5959527a25880fd528e43d3342b1375dda/borderlands3.asl#L572C1-L590C19
         Func<DeepPointer, System.Threading.Tasks.Task<IntPtr>> waitForPointer = (async (deepPtr) =>
         {
@@ -182,13 +185,13 @@ init
 
         vars.Log("found PlayerController: " + playerController.ToString("X"));
         var PlayerControllerBP_C = getObjectClass(playerController);
-        var PlayerController_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
+        var PlayerControllerBP_C_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
         vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
 
-        var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerController_MyPlayer), "bIsWearingGasMask");
+        var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
         vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
 
-        var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerController_MyPlayer), "IsUnlockingRestraints");
+        var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
         vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
 
         return;
