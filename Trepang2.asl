@@ -34,45 +34,45 @@ init
     });
 
     #region UE introspection and property setup
+    vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
+    vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
+    vars.GEngine = vars.Helper.ScanRel(7, "A8 01 75 ?? 48 C7 05") + 0x4;
+    vars.Log("Found GEngine at 0x" + vars.GEngine.ToString("X"));
+    var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
+    vars.Log("Found FNamePool at 0x" + FNamePool.ToString("X"));
+
+    // The following code derefences FName structs to their string counterparts by
+    // indexing the FNamePool table
+
+    // `fname` is the actual struct, not a pointer to the struct
+    vars.CachedFNames = new Dictionary<long, string>();
+    vars.ReadFName = (Func<long, string>)(fname => 
+    {
+        if (vars.CachedFNames.ContainsKey(fname)) return vars.CachedFNames[fname];
+
+        int name_offset  = (int) fname & 0xFFFF;
+        int chunk_offset = (int) (fname >> 0x10) & 0xFFFF;
+
+        var base_ptr = new DeepPointer((IntPtr) FNamePool + chunk_offset * 0x8 + 0x10, name_offset * 0x2);
+        byte[] name_metadata = base_ptr.DerefBytes(game, 2);
+
+        // First 10 bits are the size, but we read the bytes out of order
+        // e.g. 3C05 in memory is 0011 1100 0000 0101, but really the bytes we want are the last 8 and the first two, in that order.
+        int size = name_metadata[1] << 2 | (name_metadata[0] & 0xC0) >> 6;
+
+        // read the next (size) bytes after the name_metadata
+        IntPtr name_addr;
+        base_ptr.DerefOffsets(game, out name_addr);
+        // 2 bytes here for the name_metadata
+        string name = game.ReadString(name_addr + 0x2, size);
+
+        vars.CachedFNames[fname] = name;
+        return name;
+    });
+
     // allow us to cancel operations if the game closes or livesplit shutdowns
     vars.cts = new CancellationTokenSource();
     System.Threading.Tasks.Task.Run((Func<System.Threading.Tasks.Task<object>>)(async () => {
-        vars.GWorld = vars.Helper.ScanRel(8, "0F 2E ?? 74 ?? 48 8B 1D ?? ?? ?? ?? 48 85 DB 74");
-        vars.Log("Found GWorld at 0x" + vars.GWorld.ToString("X"));
-        vars.GEngine = vars.Helper.ScanRel(7, "A8 01 75 ?? 48 C7 05") + 0x4;
-        vars.Log("Found GEngine at 0x" + vars.GEngine.ToString("X"));
-        var FNamePool = vars.Helper.ScanRel(13, "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15");
-        vars.Log("Found FNamePool at 0x" + FNamePool.ToString("X"));
-
-        // The following code derefences FName structs to their string counterparts by
-        // indexing the FNamePool table
-
-        // `fname` is the actual struct, not a pointer to the struct
-        vars.CachedFNames = new Dictionary<long, string>();
-        vars.ReadFName = (Func<long, string>)(fname => 
-        {
-            if (vars.CachedFNames.ContainsKey(fname)) return vars.CachedFNames[fname];
-
-            int name_offset  = (int) fname & 0xFFFF;
-            int chunk_offset = (int) (fname >> 0x10) & 0xFFFF;
-
-            var base_ptr = new DeepPointer((IntPtr) FNamePool + chunk_offset * 0x8 + 0x10, name_offset * 0x2);
-            byte[] name_metadata = base_ptr.DerefBytes(game, 2);
-
-            // First 10 bits are the size, but we read the bytes out of order
-            // e.g. 3C05 in memory is 0011 1100 0000 0101, but really the bytes we want are the last 8 and the first two, in that order.
-            int size = name_metadata[1] << 2 | (name_metadata[0] & 0xC0) >> 6;
-
-            // read the next (size) bytes after the name_metadata
-            IntPtr name_addr;
-            base_ptr.DerefOffsets(game, out name_addr);
-            // 2 bytes here for the name_metadata
-            string name = game.ReadString(name_addr + 0x2, size);
-
-            vars.CachedFNames[fname] = name;
-            return name;
-        });
-
         // Unfortunately, Trepang2 has multiple versions that are simultaneously actively used for runs
         // Between these versions, the offsets for various properties change
         // So even if we have a signature for GWorld and NamePoolData, the offsets will change, breaking this
@@ -106,7 +106,7 @@ init
             while(uproperty != IntPtr.Zero)
             {
                 var propName = vars.ReadFName(vars.Helper.Read<long>(uproperty + UPROPERTY_NAME));
-                vars.Log("  at " + propName);
+                // vars.Log("  at " + propName);
 
                 if (propName == propertyName)
                 {
@@ -184,6 +184,12 @@ init
         var PlayerControllerBP_C = getObjectClass(playerController);
         var PlayerController_MyPlayer = getProperty(PlayerControllerBP_C, "MyPlayer");
         vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerController_MyPlayer).ToString("X"));
+
+        var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerController_MyPlayer), "bIsWearingGasMask");
+        vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
+
+        var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerController_MyPlayer), "IsUnlockingRestraints");
+        vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
 
         return;
     }), vars.cts.Token);
