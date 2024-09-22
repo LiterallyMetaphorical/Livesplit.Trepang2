@@ -15,6 +15,8 @@ startup
 
 init
 {
+    vars.finishedLoading = false;
+
     // basic ASL setup
     vars.CompletedSplits = new Dictionary<string, bool>();
     // this function is a helper for checking splits that may or may not exist in settings,
@@ -189,8 +191,8 @@ init
         #endregion
         
             
-        #region reading properties and offsets
         try {
+            #region reading properties and offsets
             IntPtr GameEngine = getObjectClass(vars.Helper.Read<IntPtr>(vars.GEngine));
             vars.Log("GameEngine at: " + GameEngine.ToString("X"));
             var GameEngine_GameInstance = getProperty(GameEngine, "GameInstance");
@@ -234,10 +236,12 @@ init
             vars.Log("MyPlayer Offset: " + getPropertyOffset(PlayerControllerBP_C_MyPlayer).ToString("X"));
 
             var PlayerBP_C_bIsWearingGasMask = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "bIsWearingGasMask");
-            vars.Log("bIsWearingGasMask Offset: " + getPropertyOffset(PlayerBP_C_bIsWearingGasMask).ToString("X"));
+            var PlayerBP_C_bIsWearingGasMask_Offset = getPropertyOffset(PlayerBP_C_bIsWearingGasMask);
+            vars.Log("bIsWearingGasMask Offset: " + PlayerBP_C_bIsWearingGasMask_Offset.ToString("X"));
 
             var PlayerBP_C_IsUnlockingRestraints = getProperty(getObjectPropertyClass(PlayerControllerBP_C_MyPlayer), "IsUnlockingRestraints");
-            vars.Log("IsUnlockingRestraints Offset: " + getPropertyOffset(PlayerBP_C_IsUnlockingRestraints).ToString("X"));
+            var PlayerBP_C_IsUnlockingRestraints_Offset = getPropertyOffset(PlayerBP_C_IsUnlockingRestraints);
+            vars.Log("IsUnlockingRestraints Offset: " + PlayerBP_C_IsUnlockingRestraints_Offset.ToString("X"));
             
             IntPtr UWorld = getObjectClass(vars.Helper.Read<IntPtr>(vars.GWorld));
             vars.Log("UWorld at: " + UWorld.ToString("X"));
@@ -257,13 +261,24 @@ init
             var ABaseGameMode_C_CurrentCutscene = getProperty(ABaseGameMode_C, "CurrentCutscene");
             var ABaseGameMode_C_CurrentCutscene_Offset = getPropertyOffset(ABaseGameMode_C_CurrentCutscene);
             vars.Log("CurrentCutscene Offset: " + ABaseGameMode_C_CurrentCutscene_Offset.ToString("X"));
+            #endregion
+
+            #region creating the memorywatchers
+            vars.MissionFNameWatcher = new MemoryWatcher<long>(
+                new DeepPointer(
+                    vars.GEngine,
+                    GameEngine_GameInstance_Offset,
+                    CPPFPSGameInstance_CurrentMissionInfoObject_Offset,
+                    UOBJECT_NAME
+                )
+            );
+            #endregion
         } catch (Exception e) {
             vars.Log("error: " + e);
             throw;
         }
 
-        #endregion
-
+        vars.finishedLoading = true;
         return;
     }), vars.cts.Token);
     #endregion
@@ -271,12 +286,19 @@ init
 
 update
 {
+    if (!vars.finishedLoading)
+    {
+        // still loading offsets and creating memorywatchers - see init {}
+        return;
+    }
+
     // we automatically deref this to their name without FName in update {}
     // e.g. we can access current.mission directly
     // World -> AuthorityGameMode -> CurrentCutscene -> Outer -> Name
     current.cutsceneFName = vars.Helper.Read<long>(vars.GWorld, 0x118, 0x628, 0x20, 0x18);
     // World -> GameInstance -> CurrentMissionInfoObject -> Name
-    current.missionFName = vars.Helper.Read<long>(vars.GWorld, 0x180, 0x218, 0x18);
+    vars.MissionFNameWatcher.Update(game);
+    current.missionFName = vars.MissionFNameWatcher.Current;
     
     // Other fun things
     // World -> GameInstance -> LocalPlayers.Data -> LocalPlayers[0] -> PlayerController -> MyPlayer -> bIsWearingGasMask
